@@ -6,6 +6,8 @@ from configparser import ConfigParser
 import sys
 import os
 
+directory = os.path.dirname(os.path.realpath(__file__))
+
 # ANSI Color Definitions
 HEADER = '\033[95m'
 OK_BLUE = '\033[94m'
@@ -21,14 +23,6 @@ END_C = '\033[0m'
 BOLD = '\033[1m'
 UNDERLINE = '\033[4m'
 GRAY = '\033[30m'
-
-# Checks if environment supports color - from django source code
-plat = sys.platform
-supported_platform = plat != 'Pocket PC' and (plat != 'win32' or 'ANSICON' in os.environ)
-is_a_tty = hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
-if not supported_platform or not is_a_tty:
-    HEADER = OK_GREEN = OK_BLUE = WARNING = WHITE = CYAN = RED = MAGENTA = YELLOW = FAIL = END_C = BOLD = UNDERLINE = GRAY = ""
-
 
 # Prints lines slower, for added effect
 def printd(string, end='\n'):
@@ -58,22 +52,38 @@ def loaded(message):
         clean += "   "
     printd(clean, '\r')
 
-# Read config file
-config = ConfigParser()
-config.read("testConfig.ini")
-rHOST = config.get('auth', 'host')
-rUSERNAME = config.get('auth', 'username')
-rPASSWORD = config.get('auth', 'password')
-
-
 # Main CLI loop
 while True:
+    # Read config file
+    exists = os.path.isfile(directory + "/testConfig.ini")
+    config = ConfigParser()
+    if exists:
+        config.read(directory + "/testConfig.ini")
+        rHOST = config.get('auth', 'host')
+        rUSERNAME = config.get('auth', 'username')
+        rPASSWORD = config.get('auth', 'password')
     # Confirm auth method
-    HOST = input("\nPress enter to sign in with credentials from the config file ("+rUSERNAME+"@"+rHOST+").\nOtherwise, enter the host prefix for your edsby instance (*.edsby.com): ")
+    if exists:
+        HOST = input("\nPress enter to sign in with credentials from the config file ("+rUSERNAME+"@"+rHOST+").\nOtherwise, enter the host prefix for your edsby instance (*.edsby.com): ")
+    else:
+        HOST = input("\nConfig file not detected. Enter the host prefix for your edsby instance (*.edsby.com): ")
     if HOST != "":
         HOST += ".edsby.com"
         USERNAME = input("Username: ")
         PASSWORD = getpass.getpass()
+        save = "n"
+        if not exists or USERNAME != rUSERNAME:
+            save = input("Would you like to save this to the config file? This will overwrite the current config. (y/n)")
+        if save == "y":
+            file = open(directory+"/testConfig.ini", "w")
+            if not exists:
+                config.add_section("auth")
+            config.set("auth", "host", HOST)
+            config.set("auth", "username", USERNAME)
+            config.set("auth", "password", PASSWORD)
+            config.write(file)
+            file.close()
+            exists = True
     else:
         HOST = rHOST
         USERNAME = rUSERNAME
@@ -177,7 +187,7 @@ while True:
                     assignmentsByDate[assignment['date'] + str(assignment['nid'])] = assignment
                     score = assignment['score']
                     outof = assignment['columns']
-                    date = assignment['date'][:9]
+                    date = assignment['date'][:10]
                     try:
                         if assignment['scheme'] == "gs_outof":
                             try:
@@ -213,6 +223,10 @@ while True:
                             percent = "100" if assignment['score'] == 'yes' else "0"
                             assignmentsByDate[assignment['date'] + str(assignment['nid'])]['info'] = (WHITE + "\t" + date + " " + CYAN + assignment['name'] + ": " + WHITE + assignment['score'].upper() + " (" + percent + "%)")
 
+                        elif assignment['scheme'] == "gs_percent":
+                            percent = assignment['score']
+                            assignmentsByDate[assignment['date'] + str(assignment['nid'])]['info'] = (WHITE + "\t" + date + " " + CYAN + assignment['name'] + ": " + WHITE + percent + "%")
+
                     except Exception as e:
                         printd(e)
                         printd(assignment)
@@ -235,7 +249,10 @@ while True:
                 n = int(action2)
                 printd(MAGENTA + UNDERLINE + '\nAssignment summary for ' + courses[numberedCourses[n]]['human_name'] +':' + END_C)
                 for entry in sorted(ASSIGNMENTS[numberedCourses[n]]):
-                    printd("\t" + ASSIGNMENTS[numberedCourses[n]][entry]['info'])
+                    try:
+                        printd(ASSIGNMENTS[numberedCourses[n]][entry]['info'])
+                    except KeyError:
+                        print(assignmentSummary)
                 printd(WHITE + 'Your average in '+courses[numberedCourses[n]]['human_name']+' is currently '+str(average)+'%.\n')
 
         # Action 3 - schedule
